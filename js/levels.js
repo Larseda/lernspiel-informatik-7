@@ -6,11 +6,12 @@ window.GAME_LEVELS = [
     icon: "🛠️",
     x: 90,
     y: 450,
-    objective: "Repariere den Computerkern: Bauteile finden, einbauen, vergleichen und Fehler diagnostizieren.",
+    objective: "Untersuche den geöffneten PC, finde Bauteile, baue ihn zusammen und behebe vier Hardware-Notfälle.",
     intro: [
-      "Willkommen in der Hardware-Werkstatt! Hier liegt der geöffnete Rechner vor uns.",
-      "Wir reparieren ihn in vier Missionen: entdecken, zusammenbauen, vergleichen und diagnostizieren.",
-      "Los geht’s: Finde zuerst die Bauteile an den richtigen Stellen."
+      "Willkommen in der Hardware-Werkstatt! Unser Computer ist ausgefallen.",
+      "Damit wir ihn reparieren können, müssen wir zuerst seine wichtigsten Bauteile kennenlernen.",
+      "Alles am Computer, was du anfassen kannst, nennt man Hardware.",
+      "Öffnen wir das Gehäuse und schauen hinein!"
     ]
   },
   {
