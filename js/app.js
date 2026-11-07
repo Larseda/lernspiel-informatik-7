@@ -300,7 +300,9 @@
       levelRuntimes[levelId] = createRuntime(levelId);
     }
     openScreen("level");
-    queueDialog(getLevel(levelId).intro);
+    if (levelId !== "hardware") {
+      queueDialog(getLevel(levelId).intro);
+    }
     ui.levelStage.focus();
   }
 
@@ -339,7 +341,9 @@
       root: ui.levelStage,
       complete: () => {
         runtime.missionIndex += 1;
-        runtime.missionPoints += POINTS_PER_MISSION;
+        if (!runtime.data.usesOwnScoring) {
+          runtime.missionPoints += POINTS_PER_MISSION;
+        }
         celebrateMascot();
         setFeedback("Mission erfolgreich! Byte hat den Bereich aktiviert.", "ok");
         renderMissionForLevel(levelId);
@@ -455,7 +459,7 @@
     setFeedback("", "info");
   }
 
-  function queueDialog(lines) {
+  function queueDialog(lines, onDone) {
     if (!Array.isArray(lines) || lines.length === 0) return;
     let index = 0;
     setSpeech(lines[index]);
@@ -465,6 +469,7 @@
       if (index >= lines.length) {
         ui.dialogNextBtn.classList.add("hidden");
         ui.dialogNextBtn.onclick = null;
+        if (typeof onDone === "function") onDone();
         return;
       }
       setSpeech(lines[index]);
@@ -473,6 +478,10 @@
 
   function setSpeech(text) {
     ui.mascotSpeech.textContent = text || "";
+  }
+
+  function setByteState(stateName) {
+    ui.mascotAvatar.dataset.state = stateName || "neutral";
   }
 
   function celebrateMascot() {
@@ -580,171 +589,881 @@
     }
   }
 
+  const HARDWARE_MAX_POINTS = 330;
+  const HARDWARE_COMPONENTS = [
+    {
+      id: "mainboard",
+      name: "Mainboard",
+      slotName: "Mainboard",
+      task: "Das Mainboard ist die große Platine im Computer. Es hält die Komponenten zusammen und verbindet sie miteinander.",
+      comparison: "Beim Menschen kann man es mit dem Skelett und den Nervenbahnen vergleichen.",
+      searchPrompt: "Klicke auf das Mainboard.",
+      searchHint: "Suche die große Platine in der Mitte des Gehäuses.",
+      searchHintStrong: "Die richtige Region ist groß und liegt unter vielen Steckplätzen.",
+      success: "Richtig! Das ist das Mainboard.",
+      functionText: "Hält die Komponenten zusammen und verbindet sie miteinander.",
+      comparisonName: "Skelett und Nervenbahnen",
+      comparisonExplain: "Das Mainboard hält und verbindet die Bauteile, ähnlich wie Skelett und Nervenbahnen."
+    },
+    {
+      id: "cpu",
+      name: "Prozessor",
+      slotName: "Prozessorsockel",
+      task: "Der Prozessor führt Rechenoperationen und Befehle aus. Er verarbeitet die Anweisungen der Programme.",
+      comparison: "Er wird deshalb häufig mit dem Gehirn verglichen.",
+      searchPrompt: "Finde den Prozessor.",
+      searchHint: "Der Prozessor ist ein kleiner quadratischer Chip auf dem Mainboard.",
+      searchHintStrong: "Achte auf den quadratischen Sockelbereich im oberen Mainboard-Bereich.",
+      success: "Richtig! Das ist der Prozessor.",
+      functionText: "Führt Rechenoperationen und Befehle aus.",
+      comparisonName: "Gehirn",
+      comparisonExplain: "Der Prozessor verarbeitet Befehle, ähnlich wie das Gehirn Informationen verarbeitet."
+    },
+    {
+      id: "ram",
+      name: "Arbeitsspeicher",
+      slotName: "RAM-Steckplätze",
+      task: "Der Arbeitsspeicher speichert Daten, die der Computer gerade benötigt. Auf diese Daten kann er besonders schnell zugreifen.",
+      comparison: "Er funktioniert ähnlich wie unser Kurzzeitgedächtnis.",
+      searchPrompt: "Wo befindet sich der Arbeitsspeicher?",
+      searchHint: "Suche nach länglichen Modulen direkt neben dem Prozessor.",
+      searchHintStrong: "Die richtige Region sind zwei schmale, lange Steckplätze neben dem Chip.",
+      success: "Genau, hier steckt der Arbeitsspeicher.",
+      functionText: "Speichert Daten, die gerade verarbeitet werden.",
+      comparisonName: "Kurzzeitgedächtnis",
+      comparisonExplain: "Der Arbeitsspeicher hält gerade benötigte Daten bereit, ähnlich wie das Kurzzeitgedächtnis."
+    },
+    {
+      id: "storage",
+      name: "Festplattenspeicher",
+      slotName: "Laufwerksbereich",
+      task: "Der Festplattenspeicher bewahrt Daten langfristig auf, auch wenn der Computer ausgeschaltet wird.",
+      comparison: "Er kann mit dem Langzeitgedächtnis verglichen werden.",
+      searchPrompt: "Klicke auf den Festplattenspeicher.",
+      searchHint: "Suche den Laufwerksbereich im rechten unteren Gehäusebereich.",
+      searchHintStrong: "Die richtige Region sieht wie ein Laufwerk/SSD-Bereich aus.",
+      success: "Richtig! Das ist der Festplattenspeicher.",
+      functionText: "Speichert Daten langfristig.",
+      comparisonName: "Langzeitgedächtnis",
+      comparisonExplain: "Der Festplattenspeicher bewahrt Daten dauerhaft auf, ähnlich wie das Langzeitgedächtnis."
+    },
+    {
+      id: "psu",
+      name: "Netzteil",
+      slotName: "Netzteilbereich",
+      task: "Das Netzteil versorgt alle Komponenten mit elektrischer Energie.",
+      comparison: "Es ähnelt dem Herz, weil es die notwendige Energie im System verteilt.",
+      searchPrompt: "Wo befindet sich das Netzteil?",
+      searchHint: "Das Netzteil ist ein größerer Kasten am Rand des Gehäuses.",
+      searchHintStrong: "Suche den großen Block mit Lüftergitter in einer Gehäuseecke.",
+      success: "Richtig! Das Netzteil versorgt den Computer mit Energie.",
+      functionText: "Versorgt den Computer mit Energie.",
+      comparisonName: "Herz",
+      comparisonExplain: "Das Netzteil verteilt Energie im Computer, ähnlich wie das Herz im Körper."
+    },
+    {
+      id: "gpu",
+      name: "Grafikkarte",
+      slotName: "Grafikkarten-Steckplatz",
+      task: "Die Grafikkarte verarbeitet grafische Daten und bereitet Bilder für den Monitor vor.",
+      comparison: "Sie wird mit dem Sehsinn verglichen, nicht einfach mit dem Auge.",
+      searchPrompt: "Finde die Grafikkarte.",
+      searchHint: "Die Grafikkarte ist eine lange Steckkarte und besitzt einen eigenen Lüfter.",
+      searchHintStrong: "Die richtige Region ist eine lange Karte im großen Erweiterungssteckplatz.",
+      success: "Richtig! Das ist die Grafikkarte.",
+      functionText: "Verarbeitet grafische Daten für die Bildausgabe.",
+      comparisonName: "Sehsinn",
+      comparisonExplain: "Die Grafikkarte bereitet visuelle Informationen auf, ähnlich wie der Sehsinn."
+    },
+    {
+      id: "sound",
+      name: "Soundkarte",
+      slotName: "Soundkarten-Steckplatz",
+      task: "Die Soundkarte verarbeitet Audiodaten für Lautsprecher und Mikrofon.",
+      comparison: "Sie kann mit dem Hörsinn verglichen werden.",
+      searchPrompt: "Klicke auf die Soundkarte.",
+      searchHint: "Die Soundkarte ist eine kleinere Steckkarte unter der Grafikkarte.",
+      searchHintStrong: "Suche die kleine Karte nahe den Audio-Anschlüssen.",
+      success: "Richtig! Das ist die Soundkarte.",
+      functionText: "Verarbeitet Audiodaten für Lautsprecher und Mikrofon.",
+      comparisonName: "Hörsinn",
+      comparisonExplain: "Die Soundkarte verarbeitet Toninformationen, ähnlich wie der Hörsinn."
+    },
+    {
+      id: "network",
+      name: "Netzwerkkarte",
+      slotName: "Netzwerkkarten-Steckplatz",
+      task: "Die Netzwerkkarte verbindet den Computer mit anderen Computern und Netzwerken.",
+      comparison: "",
+      searchPrompt: "Wo befindet sich die Netzwerkkarte?",
+      searchHint: "Die Netzwerkkarte sitzt in einem Erweiterungssteckplatz mit Netzwerkanschluss.",
+      searchHintStrong: "Suche die Steckkarte mit RJ45-Port in Richtung Gehäuserückseite.",
+      success: "Richtig! Das ist die Netzwerkkarte.",
+      functionText: "Verbindet den Computer mit anderen Computern und Netzwerken."
+    }
+  ];
+
+  const HARDWARE_DISCOVERY_ORDER = ["mainboard", "cpu", "ram", "storage", "psu", "gpu", "sound", "network"];
+
+  function startHardwareLevel({ root, runtime, complete }) {
+    const hw = getHardwareState(runtime);
+    setByteState("neutral");
+    root.innerHTML = `
+      ${createMissionTitle("Szene 1: Ankunft in der Hardware-Werkstatt", "Untersuche die Werkstatt und öffne anschließend den Computer.")}
+      <div class="hw-scene panel">
+        <div class="hw-workshop closed" id="hw-workshop">
+          <div class="hw-alert-line"></div>
+          <div class="hw-alert-line alt"></div>
+          <div class="hw-closed-case">
+            <div class="hw-case-monitor off">OFFLINE</div>
+          </div>
+        </div>
+        <div class="taskbar">
+          <button type="button" id="hw-open-case" class="primary-btn" disabled>Computer untersuchen</button>
+        </div>
+      </div>
+    `;
+    queueDialog([
+      "Willkommen in der Hardware-Werkstatt! Unser Computer ist ausgefallen.",
+      "Damit wir ihn reparieren können, müssen wir zuerst seine wichtigsten Bauteile kennenlernen.",
+      "Alles am Computer, was du anfassen kannst, nennt man Hardware.",
+      "Öffnen wir das Gehäuse und schauen hinein!"
+    ], () => {
+      $("#hw-open-case").disabled = false;
+      setByteState("repair");
+      setSpeech("Bereit? Starte mit „Computer untersuchen“.");
+    });
+    $("#hw-open-case").addEventListener("click", () => {
+      const workshop = $("#hw-workshop");
+      workshop.classList.remove("closed");
+      workshop.classList.add("opening");
+      setByteState("repair");
+      setFeedback("Das Gehäuse öffnet sich.", "info");
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      setTimeout(() => {
+        hw.labelsVisible = [];
+        complete();
+      }, reduced ? 50 : 450);
+    });
+  }
+
+  function showComponentDiscovery({ root, runtime, complete }) {
+    const hw = getHardwareState(runtime);
+    const index = hw.discoveryIndex || 0;
+    const componentId = HARDWARE_DISCOVERY_ORDER[index];
+    if (!componentId) {
+      setByteState("success");
+      setSpeech("Jetzt kennst du die wichtigsten Teile. Mal sehen, ob du sie im Computer wiederfindest!");
+      root.innerHTML = `
+        ${createMissionTitle("Szene 2: Bauteile entdecken", "Alle wichtigen Komponenten wurden vorgestellt.")}
+        ${renderHardwarePcSvg({ labels: hw.labelsVisible, mode: "open" })}
+        <div class="taskbar"><button type="button" id="hw-start-search">Suchmission starten</button></div>
+      `;
+      $("#hw-start-search").addEventListener("click", complete);
+      return;
+    }
+    const comp = getHardwareComponent(componentId);
+    const discovered = new Set(hw.labelsVisible || []);
+    discovered.add(componentId);
+    hw.labelsVisible = [...discovered];
+    setByteState("neutral");
+    setSpeech(comp.task);
+    root.innerHTML = `
+      ${createMissionTitle("Szene 2: Bauteile entdecken", `Bauteil ${index + 1}/8: ${comp.name}`)}
+      ${renderHardwarePcSvg({ labels: hw.labelsVisible, mode: "open", highlight: componentId, dimOthers: true, pulse: componentId })}
+      <div class="panel hw-info-box">
+        <p><strong>${comp.name}</strong></p>
+        <p>${comp.task}</p>
+        ${comp.comparison ? `<p>${comp.comparison}</p>` : "<p>Für diese Komponente gibt es hier keinen verbindlichen menschlichen Vergleich.</p>"}
+      </div>
+      <div class="taskbar"><button type="button" id="hw-discovery-next">Weiter</button></div>
+    `;
+    $("#hw-discovery-next").addEventListener("click", () => {
+      hw.discoveryIndex = index + 1;
+      showComponentDiscovery({ root, runtime, complete });
+    });
+  }
+
+  function startComponentSearch({ root, runtime, complete }) {
+    const hw = getHardwareState(runtime);
+    if (!hw.searchOrder) {
+      hw.searchOrder = shuffle([...HARDWARE_DISCOVERY_ORDER]);
+      hw.searchIndex = 0;
+      hw.searchAttempts = {};
+      hw.searchSolved = [];
+    }
+    if (hw.searchIndex >= hw.searchOrder.length) {
+      setByteState("success");
+      setSpeech("Sehr gut! Du findest dich schon im Inneren des Computers zurecht.");
+      root.innerHTML = `
+        ${createMissionTitle("Szene 3: Bauteile im Computer finden", "Alle Suchaufträge erledigt.")}
+        ${renderHardwarePcSvg({ labels: hw.labelsVisible, mode: "open", solved: hw.searchSolved })}
+        <div class="taskbar"><button type="button" id="hw-search-finish">Weiter zum Zusammenbau</button></div>
+      `;
+      $("#hw-search-finish").addEventListener("click", complete);
+      return;
+    }
+    const targetId = hw.searchOrder[hw.searchIndex];
+    const target = getHardwareComponent(targetId);
+    const attempts = hw.searchAttempts[targetId] || 0;
+    setByteState("neutral");
+    if (hw.pendingHintMessage) {
+      setSpeech(hw.pendingHintMessage);
+      hw.pendingHintMessage = "";
+    } else {
+      setSpeech(target.searchPrompt);
+    }
+    root.innerHTML = `
+      ${createMissionTitle("Szene 3: Bauteile im Computer finden", `Suchauftrag ${hw.searchIndex + 1}/8: ${target.searchPrompt}`)}
+      ${renderHardwarePcSvg({ labels: hw.labelsVisible, mode: "open", solved: hw.searchSolved, focusTarget: attempts >= 2 ? targetId : "" })}
+      <p><strong>Punkte in diesem Auftrag:</strong> erster Versuch 10 | zweiter Versuch 7 | danach 5</p>
+    `;
+    wireHardwareComponentButtons(root, (clickedId, button) => {
+      if (clickedId === targetId) {
+        const tryCount = hw.searchAttempts[targetId] || 0;
+        const points = tryCount === 0 ? 10 : (tryCount === 1 ? 7 : 5);
+        addHardwarePoints(runtime, `search-${targetId}`, points);
+        if (!hw.searchSolved.includes(targetId)) hw.searchSolved.push(targetId);
+        hw.searchIndex += 1;
+        setByteState("success");
+        setSpeech(target.success);
+        setFeedback(`${target.success} +${points} Punkte`, "ok");
+        startComponentSearch({ root, runtime, complete });
+        return;
+      }
+      hw.searchAttempts[targetId] = (hw.searchAttempts[targetId] || 0) + 1;
+      hw.totalAttempts += 1;
+      button.classList.add("hw-wrong");
+      setTimeout(() => button.classList.remove("hw-wrong"), 450);
+      if (hw.searchAttempts[targetId] === 1) {
+        hw.hintsUsed += 1;
+        setByteState("hint");
+        setSpeech(target.searchHint);
+        setFeedback(target.searchHint, "warn");
+      } else {
+        hw.hintsUsed += 1;
+        setByteState("hint");
+        hw.pendingHintMessage = target.searchHintStrong;
+        setFeedback("Die richtige Einbauregion pulsiert leicht. Klicke sie jetzt an.", "warn");
+        startComponentSearch({ root, runtime, complete });
+      }
+    });
+  }
+
+  function startComputerAssembly({ root, runtime, complete }) {
+    const hw = getHardwareState(runtime);
+    const parts = [
+      { id: "cpu", name: "Prozessor" },
+      { id: "ram", name: "Arbeitsspeicher (2 Module)" },
+      { id: "storage", name: "Festplattenspeicher" },
+      { id: "psu", name: "Netzteil" },
+      { id: "gpu", name: "Grafikkarte" },
+      { id: "sound", name: "Soundkarte" },
+      { id: "network", name: "Netzwerkkarte" }
+    ];
+    if (!hw.assemblyPlaced) hw.assemblyPlaced = {};
+    const leftParts = parts.filter((part) => !hw.assemblyPlaced[part.id]);
+    root.innerHTML = `
+      ${createMissionTitle("Szene 4: Computer zusammenbauen", "Setze alle sieben Bauteile ein. Drag-and-drop oder Anklicken + Ziel anklicken.")}
+      <div class="mission-grid">
+        <div class="panel">
+          ${renderHardwarePcSvg({ labels: hw.labelsVisible, mode: "assembly", placed: hw.assemblyPlaced })}
+          <p>Aktivierte Leitungen: ${Object.keys(hw.assemblyPlaced).length}/7</p>
+        </div>
+        <div class="parts-bank panel" id="hw-assembly-bank">
+          ${leftParts.map((part) => `<button type="button" class="part-card hw-assembly-part" draggable="true" data-part="${part.id}">${part.name}</button>`).join("")}
+          ${leftParts.length === 0 ? "<p>Alle Bauteile eingebaut.</p>" : ""}
+        </div>
+      </div>
+      <div class="taskbar">
+        <span><strong>Ausgewählt:</strong> <span id="hw-selected-part">${hw.selectedAssembly || "–"}</span></span>
+      </div>
+    `;
+    if (!leftParts.length) {
+      setByteState("success");
+      setSpeech("Alle Teile sind eingebaut. Jetzt müssen wir noch prüfen, welche Aufgaben sie übernehmen.");
+      const nextButton = document.createElement("button");
+      nextButton.type = "button";
+      nextButton.textContent = "Weiter zur Funktionsprüfung";
+      nextButton.addEventListener("click", complete);
+      root.appendChild(nextButton);
+      return;
+    }
+    const partNodes = [...root.querySelectorAll(".hw-assembly-part")];
+    const slotNodes = [...root.querySelectorAll(".hw-slot-btn")];
+    partNodes.forEach((node) => {
+      node.addEventListener("click", () => {
+        hw.selectedAssembly = node.dataset.part;
+        $("#hw-selected-part").textContent = getHardwareComponent(hw.selectedAssembly).name;
+        partNodes.forEach((entry) => entry.classList.toggle("selected", entry === node));
+      });
+      node.addEventListener("dragstart", (event) => {
+        hw.selectedAssembly = node.dataset.part;
+        event.dataTransfer.setData("text/plain", node.dataset.part);
+      });
+    });
+    slotNodes.forEach((slot) => {
+      slot.addEventListener("dragover", (event) => event.preventDefault());
+      slot.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const selected = event.dataTransfer.getData("text/plain") || hw.selectedAssembly;
+        tryPlaceAssemblyPart(selected, slot.dataset.slot);
+      });
+      slot.addEventListener("click", () => {
+        tryPlaceAssemblyPart(hw.selectedAssembly, slot.dataset.slot);
+      });
+      slot.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          tryPlaceAssemblyPart(hw.selectedAssembly, slot.dataset.slot);
+        }
+      });
+    });
+
+    function tryPlaceAssemblyPart(selectedPart, slotId) {
+      if (!selectedPart || hw.assemblyPlaced[slotId]) return;
+      if (selectedPart === slotId) {
+        hw.assemblyPlaced[slotId] = true;
+        addHardwarePoints(runtime, `assembly-${slotId}`, 10);
+        setByteState("repair");
+        setSpeech(`${getHardwareComponent(slotId).name}: ${getHardwareComponent(slotId).functionText}`);
+        setFeedback("Bauteil rastet ein und Leitung wird aktiviert. +10 Punkte", "ok");
+        hw.selectedAssembly = null;
+        startComputerAssembly({ root, runtime, complete });
+      } else {
+        hw.totalAttempts += 1;
+        setByteState("hint");
+        setSpeech(getAssemblyHint(slotId));
+        setFeedback("Dieses Bauteil passt dort nicht. Versuche es erneut.", "warn");
+        const targetSlot = root.querySelector(`.hw-slot-btn[data-slot="${slotId}"]`);
+        if (targetSlot) {
+          targetSlot.classList.add("hw-wrong");
+          setTimeout(() => targetSlot.classList.remove("hw-wrong"), 450);
+        }
+      }
+    }
+  }
+
+  function startFunctionAndComparison({ root, runtime, complete }) {
+    const hw = getHardwareState(runtime);
+    if (!hw.functionRound) hw.functionRound = 1;
+    if (!hw.functionLinks) hw.functionLinks = {};
+    if (!hw.humanLinks) hw.humanLinks = {};
+
+    if (hw.functionRound <= 2) {
+      const rounds = [
+        ["cpu", "psu", "ram", "storage"],
+        ["gpu", "sound", "mainboard", "network"]
+      ];
+      const ids = rounds[hw.functionRound - 1];
+      renderConnectionRound({
+        root,
+        title: `Szene 5A: Funktionen verbinden – Runde ${hw.functionRound}/2`,
+        subtitle: "Verbinde Hardwarekomponenten mit ihren Aufgaben.",
+        leftItems: ids.map((id) => ({ id, label: getHardwareComponent(id).name, icon: getHardwareIcon(id) })),
+        rightItems: shuffle(ids.map((id) => ({ id, label: getHardwareComponent(id).functionText }))),
+        links: hw.functionLinks,
+        onSuccess: (id) => {
+          addHardwarePoints(runtime, `func-${id}`, 8);
+          setByteState("success");
+          setSpeech(`Richtig verbunden: ${getHardwareComponent(id).name}.`);
+        },
+        onMistake: (leftId) => {
+          hw.totalAttempts += 1;
+          hw.hintsUsed += 1;
+          setByteState("hint");
+          setSpeech(`${getHardwareComponent(leftId).name}: ${getHardwareComponent(leftId).functionText}`);
+        },
+        onRoundDone: () => {
+          if (hw.functionRound === 1) {
+            hw.functionRound = 2;
+            startFunctionAndComparison({ root, runtime, complete });
+          } else {
+            hw.functionRound = 3;
+            startFunctionAndComparison({ root, runtime, complete });
+          }
+        }
+      });
+      return;
+    }
+
+    const ids = ["cpu", "psu", "ram", "storage", "gpu", "sound", "mainboard"];
+    renderConnectionRound({
+      root,
+      title: "Szene 5B: Mensch und Computer",
+      subtitle: "Verbinde die Komponenten mit den passenden menschlichen Vergleichen.",
+      leftItems: ids.map((id) => ({ id, label: getHardwareComponent(id).name, icon: getHardwareIcon(id) })),
+      rightItems: shuffle(ids.map((id) => ({ id, label: getHardwareComponent(id).comparisonName }))),
+      links: hw.humanLinks,
+      onSuccess: (id) => {
+        addHardwarePoints(runtime, `human-${id}`, 8);
+        setByteState("success");
+        setSpeech(getHardwareComponent(id).comparisonExplain);
+      },
+      onMistake: (leftId) => {
+        hw.totalAttempts += 1;
+        hw.hintsUsed += 1;
+        setByteState("hint");
+        setSpeech(`Hinweis: ${getHardwareComponent(leftId).comparison}`);
+      },
+      onRoundDone: () => {
+        complete();
+      }
+    });
+  }
+
+  function startRepairMission({ root, runtime }) {
+    const hw = getHardwareState(runtime);
+    if (!hw.repairCases) {
+      hw.repairCases = [
+        {
+          title: "FALL 1: KEIN STROM",
+          prompt: "Der Computer bekommt keine Energie. Welches Bauteil sollten wir überprüfen?",
+          component: "psu",
+          success: "Richtig! Das Netzteil versorgt die Komponenten mit Energie."
+        },
+        {
+          title: "FALL 2: KEIN BILD",
+          prompt: "Der Computer läuft, aber auf dem Monitor erscheint kein Bild. Welches Bauteil verarbeitet die grafischen Daten?",
+          component: "gpu",
+          success: "Genau! Die Grafikkarte verarbeitet die Daten für die Bildausgabe."
+        },
+        {
+          title: "FALL 3: KEINE NETZWERKVERBINDUNG",
+          prompt: "Der Computer kann keine Verbindung zu anderen Computern herstellen. Welches Bauteil ist dafür zuständig?",
+          component: "network",
+          success: "Richtig! Die Netzwerkkarte verbindet den Computer mit anderen Computern und Netzwerken."
+        },
+        {
+          title: "FALL 4: DATEN FÜR LAUFENDE PROGRAMME",
+          prompt: "Der Computer benötigt einen schnellen Speicher für Daten, die gerade verarbeitet werden. Welches Bauteil brauchen wir?",
+          component: "ram",
+          success: "Genau! Der Arbeitsspeicher hält aktuell benötigte Daten schnell bereit."
+        }
+      ];
+      hw.repairIndex = 0;
+      hw.repairSolved = {};
+      hw.repairState = {
+        power: false,
+        monitor: false,
+        network: false,
+        dataFlow: false,
+        systemOnline: false
+      };
+    }
+
+    if (hw.levelCompleted) {
+      renderHardwareSummary(root, runtime);
+      return;
+    }
+
+    const active = hw.repairCases[hw.repairIndex];
+    setByteState("repair");
+    setSpeech("Alle Teile sind eingebaut. Aber mehrere Fehler verhindern den Start. Untersuche den Computer und repariere die Störungen!");
+    root.innerHTML = `
+      ${createMissionTitle("Szene 6: Notfall in der Hardware-Werkstatt", active ? `${active.title} – ${active.prompt}` : "Abschlusssequenz")}
+      <div class="panel">
+        ${renderHardwarePcSvg({
+          labels: HARDWARE_COMPONENTS.map((entry) => entry.id),
+          mode: "repair",
+          solved: Object.keys(hw.repairSolved),
+          status: hw.repairState
+        })}
+        <div class="hw-repair-status">
+          <span>${hw.repairState.power ? "🟢 Strom aktiv" : "🔴 Stromausfall"}</span>
+          <span>${hw.repairState.monitor ? "🟢 Monitor aktiv" : "🔴 Kein Bild"}</span>
+          <span>${hw.repairState.network ? "🟢 Netzwerk aktiv" : "🔴 Netzwerk getrennt"}</span>
+          <span>${hw.repairState.dataFlow ? "🟢 Datentransfer aktiv" : "🔴 Datenstau"}</span>
+        </div>
+      </div>
+    `;
+    wireHardwareComponentButtons(root, (clickedId, button) => {
+      if (!active) return;
+      if (clickedId === active.component) {
+        hw.repairSolved[active.title] = true;
+        addHardwarePoints(runtime, `repair-${active.component}`, 15);
+        applyRepairState(hw.repairState, active.component);
+        setByteState("success");
+        setSpeech(active.success);
+        setFeedback(`${active.success} +15 Punkte`, "ok");
+        hw.repairIndex += 1;
+        if (hw.repairIndex >= hw.repairCases.length) {
+          runHardwarePowerOnSequence(root, runtime);
+        } else {
+          startRepairMission({ root, runtime });
+        }
+      } else {
+        hw.totalAttempts += 1;
+        hw.hintsUsed += 1;
+        setByteState("hint");
+        setSpeech(getHardwareComponent(active.component).searchHint);
+        setFeedback("Das passt nicht zum aktuellen Notfall. Prüfe den Hinweis von Byte.", "warn");
+        button.classList.add("hw-wrong");
+        setTimeout(() => button.classList.remove("hw-wrong"), 450);
+      }
+    });
+  }
+
+  function runHardwarePowerOnSequence(root, runtime) {
+    const hw = getHardwareState(runtime);
+    hw.repairState.power = true;
+    hw.repairState.monitor = true;
+    hw.repairState.network = true;
+    hw.repairState.dataFlow = true;
+    hw.repairState.systemOnline = true;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setByteState("celebrate");
+    setSpeech("Geschafft! Der Computer läuft wieder.");
+    setFeedback("Netzteil startet, Leitungen leuchten, Lüfter drehen und der Monitor zeigt SYSTEM ONLINE.", "ok");
+    hw.levelCompleted = true;
+    completeHardwareLevel(runtime);
+    setTimeout(() => renderHardwareSummary(root, runtime), reduced ? 20 : 700);
+  }
+
+  function completeHardwareLevel(runtime) {
+    const hw = getHardwareState(runtime);
+    const points = hw.points;
+    const stars = getHardwareStars(points, HARDWARE_MAX_POINTS);
+    const levelId = "hardware";
+    const levelState = state.levelStates[levelId];
+    levelState.bestPoints = Math.max(levelState.bestPoints, points);
+    levelState.bestStars = Math.max(levelState.bestStars, stars);
+    levelState.outcome = "completed";
+    state.avatarIndex = Math.min(STATION_IDS.indexOf(levelId) + 1, STATION_IDS.length - 1);
+    runtime.finished = true;
+  }
+
+  function renderHardwareSummary(root, runtime) {
+    const hw = getHardwareState(runtime);
+    const points = hw.points;
+    const stars = getHardwareStars(points, HARDWARE_MAX_POINTS);
+    root.innerHTML = `
+      ${createMissionTitle("Levelabschluss: Hardware-Werkstatt", "SYSTEM ONLINE")}
+      <div class="panel">
+        ${renderHardwarePcSvg({
+          labels: HARDWARE_COMPONENTS.map((entry) => entry.id),
+          mode: "repair",
+          solved: HARDWARE_COMPONENTS.map((entry) => entry.id),
+          status: { power: true, monitor: true, network: true, dataFlow: true, systemOnline: true }
+        })}
+      </div>
+      <div class="panel">
+        <p>Du kannst die wichtigsten Hardwarekomponenten erkennen und ihre Aufgaben erklären.</p>
+        <ul>
+          <li>Prozessor: Befehle und Berechnungen</li>
+          <li>Netzteil: Energie</li>
+          <li>Arbeitsspeicher: aktuelle Daten</li>
+          <li>Festplattenspeicher: langfristige Daten</li>
+          <li>Grafikkarte: Bildausgabe</li>
+          <li>Soundkarte: Audio</li>
+          <li>Mainboard: Verbindung der Komponenten</li>
+          <li>Netzwerkkarte: Netzwerkverbindung</li>
+        </ul>
+        <p><strong>Punkte:</strong> ${points}/${HARDWARE_MAX_POINTS} | <strong>Sterne:</strong> ${stars}</p>
+        <p><strong>Benötigte Versuche:</strong> ${hw.totalAttempts} | <strong>Verwendete Hinweise:</strong> ${hw.hintsUsed}</p>
+      </div>
+      <div class="taskbar">
+        <button type="button" id="hw-to-map">Zur Weltkarte</button>
+        <button type="button" id="hw-repeat" class="secondary-btn">Level wiederholen</button>
+      </div>
+    `;
+    $("#hw-to-map").addEventListener("click", () => {
+      setByteState("success");
+      setSpeech("Klasse Leistung! Auf zur EVA-Station.");
+      openScreen("map");
+    });
+    $("#hw-repeat").addEventListener("click", () => {
+      levelRuntimes.hardware = createRuntime("hardware");
+      openLevel("hardware");
+    });
+  }
+
+  function renderConnectionRound({
+    root,
+    title,
+    subtitle,
+    leftItems,
+    rightItems,
+    links,
+    onSuccess,
+    onMistake,
+    onRoundDone
+  }) {
+    root.innerHTML = `
+      ${createMissionTitle(title, subtitle)}
+      <div class="panel hw-link-board" id="hw-link-board">
+        <svg id="hw-link-svg" class="hw-link-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="hw-link-col" id="hw-left-col">
+          ${leftItems.map((item) => `<button type="button" class="tag hw-link-item" data-side="left" data-id="${item.id}" id="left-${item.id}">${item.icon} ${item.label}</button>`).join("")}
+        </div>
+        <div class="hw-link-col" id="hw-right-col">
+          ${rightItems.map((item) => `<button type="button" class="tag hw-link-item" data-side="right" data-id="${item.id}" id="right-${item.id}">${item.label}</button>`).join("")}
+        </div>
+      </div>
+      <p>Verbunden: ${Object.keys(links).length}/${leftItems.length}</p>
+    `;
+    drawLinkLines(links);
+    let selected = "";
+    root.querySelectorAll(".hw-link-item").forEach((button) => {
+      const id = button.dataset.id;
+      if (links[id] === id || Object.values(links).includes(id)) {
+        button.classList.add("linked");
+      }
+      button.addEventListener("click", () => {
+        if (button.classList.contains("linked")) return;
+        if (button.dataset.side === "left") {
+          selected = id;
+          setFeedback(`${getHardwareComponent(selected).name} gewählt. Jetzt passende Zuordnung anklicken.`, "info");
+          return;
+        }
+        if (!selected) {
+          setFeedback("Wähle zuerst links eine Komponente.", "warn");
+          return;
+        }
+        if (selected === id) {
+          links[selected] = id;
+          onSuccess(selected);
+          drawLinkLines(links);
+          selected = "";
+          const done = leftItems.every((item) => links[item.id] === item.id);
+          if (done) onRoundDone();
+        } else {
+          onMistake(selected);
+          setFeedback("Diese Verbindung passt nicht. Die Linie wurde verworfen.", "warn");
+          selected = "";
+        }
+      });
+    });
+
+    function drawLinkLines(currentLinks) {
+      const board = $("#hw-link-board");
+      const svgNode = $("#hw-link-svg");
+      const rect = board.getBoundingClientRect();
+      svgNode.setAttribute("viewBox", `0 0 ${Math.max(rect.width, 20)} ${Math.max(rect.height, 20)}`);
+      svgNode.innerHTML = "";
+      Object.keys(currentLinks).forEach((leftId) => {
+        const rightId = currentLinks[leftId];
+        if (leftId !== rightId) return;
+        const leftNode = root.querySelector(`#left-${leftId}`);
+        const rightNode = root.querySelector(`#right-${rightId}`);
+        if (!leftNode || !rightNode) return;
+        const l = leftNode.getBoundingClientRect();
+        const r = rightNode.getBoundingClientRect();
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", String(l.right - rect.left));
+        line.setAttribute("y1", String(l.top + (l.height / 2) - rect.top));
+        line.setAttribute("x2", String(r.left - rect.left));
+        line.setAttribute("y2", String(r.top + (r.height / 2) - rect.top));
+        line.setAttribute("stroke", "#22c55e");
+        line.setAttribute("stroke-width", "3");
+        line.setAttribute("stroke-linecap", "round");
+        svgNode.appendChild(line);
+      });
+    }
+  }
+
+  function wireHardwareComponentButtons(root, onClick) {
+    root.querySelectorAll("[data-component]").forEach((node) => {
+      node.addEventListener("click", () => onClick(node.dataset.component, node));
+      node.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick(node.dataset.component, node);
+        }
+      });
+    });
+  }
+
+  function renderHardwarePcSvg({
+    labels = [],
+    mode = "open",
+    highlight = "",
+    dimOthers = false,
+    pulse = "",
+    solved = [],
+    focusTarget = "",
+    placed = {},
+    status = {}
+  }) {
+    const known = new Set(labels);
+    const solvedSet = new Set(solved);
+    const placedSet = new Set(Object.keys(placed));
+    const statusMap = {
+      power: !!status.power,
+      monitor: !!status.monitor,
+      network: !!status.network,
+      dataFlow: !!status.dataFlow,
+      systemOnline: !!status.systemOnline
+    };
+    const comp = (id, body) => {
+      const isDim = dimOthers && highlight && highlight !== id;
+      const classes = [
+        "hw-component",
+        known.has(id) ? "known" : "unknown",
+        solvedSet.has(id) ? "solved" : "",
+        placedSet.has(id) ? "placed" : "",
+        highlight === id ? "highlight" : "",
+        pulse === id || focusTarget === id ? "pulse" : "",
+        isDim ? "dimmed" : ""
+      ].filter(Boolean).join(" ");
+      return `<g class="${classes}" data-component="${id}" tabindex="0" role="button" aria-label="${getHardwareComponent(id).name}">${body}</g>`;
+    };
+    const slotButton = (id, x, y, w, h, text) => `
+      <foreignObject x="${x}" y="${y}" width="${w}" height="${h}">
+        <button type="button" class="hw-slot-btn" data-slot="${id}" aria-label="${text}">${text}</button>
+      </foreignObject>
+    `;
+    return `
+      <div class="hw-pc-wrap ${mode === "assembly" ? "assembly" : ""}">
+        <svg class="hw-pc-svg" viewBox="0 0 1000 620" role="img" aria-label="Geöffneter Desktop-PC mit Hardwarekomponenten">
+          <rect x="20" y="20" width="960" height="580" rx="22" class="hw-case"></rect>
+          <rect x="35" y="35" width="930" height="550" rx="16" class="hw-inner"></rect>
+          <path d="M55 90 H945" class="hw-cable ${statusMap.power ? "live" : "alert"}"></path>
+          <path d="M55 120 H945" class="hw-cable ${statusMap.network ? "live" : "alert"}"></path>
+          <path d="M55 150 H945" class="hw-cable ${statusMap.dataFlow ? "live" : "alert"}"></path>
+
+          ${comp("mainboard", `
+            <rect x="215" y="125" width="470" height="360" rx="18" class="hw-mainboard"></rect>
+            <path d="M250 180 H635 M250 220 H635 M250 260 H635 M250 300 H635 M250 340 H635" class="hw-trace ${statusMap.systemOnline ? "live" : ""}"></path>
+            <text x="430" y="112" class="hw-label-anchor">Mainboard</text>
+          `)}
+          ${comp("cpu", `
+            <rect x="335" y="200" width="90" height="90" rx="8" class="hw-chip"></rect>
+            <circle cx="350" cy="215" r="3"></circle><circle cx="372" cy="215" r="3"></circle><circle cx="394" cy="215" r="3"></circle>
+            <circle cx="350" cy="273" r="3"></circle><circle cx="372" cy="273" r="3"></circle><circle cx="394" cy="273" r="3"></circle>
+            <text x="355" y="195" class="hw-label-anchor">CPU</text>
+          `)}
+          ${comp("ram", `
+            <rect x="442" y="188" width="28" height="132" rx="4" class="hw-ram"></rect>
+            <rect x="478" y="188" width="28" height="132" rx="4" class="hw-ram"></rect>
+            <text x="444" y="182" class="hw-label-anchor">RAM</text>
+          `)}
+          ${comp("storage", `
+            <rect x="720" y="350" width="170" height="110" rx="10" class="hw-drive"></rect>
+            <circle cx="760" cy="405" r="18" class="hw-drive-ring"></circle>
+            <rect x="790" y="388" width="78" height="10" rx="4" class="hw-drive-slot"></rect>
+            <text x="730" y="345" class="hw-label-anchor">SSD/HDD</text>
+          `)}
+          ${comp("psu", `
+            <rect x="65" y="80" width="130" height="150" rx="8" class="hw-psu"></rect>
+            <circle cx="130" cy="154" r="36" class="hw-fan ${statusMap.power ? "spin" : ""}"></circle>
+            <text x="72" y="72" class="hw-label-anchor">Netzteil</text>
+          `)}
+          ${comp("gpu", `
+            <rect x="300" y="360" width="300" height="58" rx="8" class="hw-gpu"></rect>
+            <circle cx="395" cy="389" r="18" class="hw-gpu-fan ${statusMap.monitor ? "spin" : ""}"></circle>
+            <circle cx="505" cy="389" r="18" class="hw-gpu-fan ${statusMap.monitor ? "spin" : ""}"></circle>
+            <text x="308" y="352" class="hw-label-anchor">Grafikkarte</text>
+          `)}
+          ${comp("sound", `
+            <rect x="305" y="434" width="210" height="38" rx="8" class="hw-sound"></rect>
+            <circle cx="485" cy="453" r="5"></circle><circle cx="498" cy="453" r="5"></circle>
+            <text x="312" y="428" class="hw-label-anchor">Soundkarte</text>
+          `)}
+          ${comp("network", `
+            <rect x="536" y="434" width="165" height="38" rx="8" class="hw-network"></rect>
+            <rect x="668" y="444" width="24" height="18" rx="2" class="hw-rj45 ${statusMap.network ? "active" : ""}"></rect>
+            <text x="542" y="428" class="hw-label-anchor">Netzwerkkarte</text>
+          `)}
+
+          <line x1="600" y1="388" x2="930" y2="388" class="hw-monitor-link ${statusMap.monitor ? "live" : "alert"}"></line>
+          <line x1="130" y1="80" x2="130" y2="45" class="hw-power-link ${statusMap.power ? "live" : "alert"}"></line>
+          <rect x="932" y="334" width="42" height="108" rx="6" class="hw-monitor"></rect>
+          <rect x="938" y="346" width="30" height="66" rx="4" class="hw-monitor-screen ${statusMap.monitor ? "on" : "off"}"></rect>
+          <text x="942" y="382" class="hw-monitor-text">${statusMap.systemOnline ? "SYSTEM ONLINE" : (statusMap.monitor ? "TEST" : "----")}</text>
+          <rect x="75" y="35" width="112" height="16" rx="4" class="hw-power-led ${statusMap.power ? "on" : "off"}"></rect>
+          <rect x="742" y="150" width="150" height="16" rx="4" class="hw-network-led ${statusMap.network ? "on" : "off"}"></rect>
+          <circle cx="770" cy="160" r="4" class="hw-packet ${statusMap.network ? "move" : ""}"></circle>
+
+          ${mode === "assembly" ? `
+            ${slotButton("cpu", 326, 198, 110, 96, "Prozessor-Slot")}
+            ${slotButton("ram", 437, 180, 78, 145, "RAM-Slot")}
+            ${slotButton("storage", 714, 350, 185, 115, "Laufwerk-Slot")}
+            ${slotButton("psu", 60, 78, 140, 156, "Netzteil-Slot")}
+            ${slotButton("gpu", 293, 356, 318, 68, "Grafikkarten-Slot")}
+            ${slotButton("sound", 299, 429, 222, 46, "Soundkarten-Slot")}
+            ${slotButton("network", 531, 429, 178, 46, "Netzwerkkarten-Slot")}
+          ` : ""}
+        </svg>
+      </div>
+    `;
+  }
+
+  function applyRepairState(stateRef, componentId) {
+    if (componentId === "psu") stateRef.power = true;
+    if (componentId === "gpu") stateRef.monitor = true;
+    if (componentId === "network") stateRef.network = true;
+    if (componentId === "ram") stateRef.dataFlow = true;
+  }
+
+  function addHardwarePoints(runtime, key, points) {
+    const hw = getHardwareState(runtime);
+    if (hw.scoredKeys[key]) return;
+    hw.scoredKeys[key] = true;
+    hw.points += points;
+  }
+
+  function getHardwareStars(points, maxPoints) {
+    const ratio = maxPoints ? (points / maxPoints) : 0;
+    if (ratio >= 0.85) return 3;
+    if (ratio >= 0.65) return 2;
+    return points > 0 ? 1 : 0;
+  }
+
+  function getHardwareState(runtime) {
+    runtime.data.usesOwnScoring = true;
+    if (!runtime.data.hardware) {
+      runtime.data.hardware = {
+        discoveryIndex: 0,
+        labelsVisible: [],
+        points: 0,
+        scoredKeys: {},
+        totalAttempts: 0,
+        hintsUsed: 0
+      };
+    }
+    return runtime.data.hardware;
+  }
+
+  function getHardwareComponent(id) {
+    return HARDWARE_COMPONENTS.find((entry) => entry.id === id);
+  }
+
+  function getHardwareIcon(id) {
+    const icons = {
+      mainboard: "🧩",
+      cpu: "🧠",
+      ram: "⚡",
+      storage: "💾",
+      psu: "🔌",
+      gpu: "🖼️",
+      sound: "🔊",
+      network: "🌐"
+    };
+    return icons[id] || "🔹";
+  }
+
+  function getAssemblyHint(slotId) {
+    const hints = {
+      cpu: "Der Prozessor gehört auf den quadratischen Prozessorsockel.",
+      ram: "Der Arbeitsspeicher gehört in die langen RAM-Steckplätze.",
+      storage: "Der Festplattenspeicher gehört in den Laufwerksbereich.",
+      psu: "Das Netzteil gehört in den größeren Netzteilbereich am Rand.",
+      gpu: "Die Grafikkarte gehört in den langen Erweiterungssteckplatz.",
+      sound: "Die Soundkarte gehört in den kleineren Erweiterungssteckplatz.",
+      network: "Die Netzwerkkarte gehört in den Erweiterungssteckplatz mit Netzwerkanschluss."
+    };
+    return hints[slotId] || "Prüfe Form und Einbauort des Bauteils.";
+  }
+
   const LEVEL_RENDERERS = {
     hardware: [
-      ({ root, runtime, complete, mistake }) => {
-        const found = runtime.data.foundParts || [];
-        const order = [
-          "Mainboard",
-          "Prozessor",
-          "Arbeitsspeicher",
-          "Netzteil",
-          "Festplattenspeicher",
-          "Grafikkarte",
-          "Soundkarte",
-          "Netzwerkkarte"
-        ];
-        const target = order[found.length];
-        root.innerHTML = `
-          ${createMissionTitle("Mission 1: Bauteile entdecken", `Klicke auf: ${target || "Fertig"}`)}
-          <div class="board panel" id="hw-discover-board">
-            ${order.map((name) => `<button type="button" class="slot ${found.includes(name) ? "correct" : ""}" data-part="${name}" aria-label="${name}">${found.includes(name) ? name : "?"}</button>`).join("")}
-          </div>
-        `;
-        const board = $("#hw-discover-board");
-        board.querySelectorAll(".slot").forEach((slot) => {
-          slot.addEventListener("click", () => {
-            const chosen = slot.dataset.part;
-            if (chosen === target) {
-              if (!runtime.data.foundParts) runtime.data.foundParts = [];
-              runtime.data.foundParts.push(chosen);
-              setSpeech(`${chosen} korrekt! ${hardwareHint(chosen)}`);
-              if (runtime.data.foundParts.length === order.length) {
-                complete();
-              } else {
-                LEVEL_RENDERERS.hardware[0]({ root, runtime, complete, mistake });
-              }
-            } else if (!runtime.data.foundParts?.includes(chosen)) {
-              mistake("Das war es noch nicht. Orientierung: Suche die passende Position für das genannte Bauteil.");
-              setSpeech("Fast! Schau auf die typische Lage der Bauteile im Rechner.");
-            }
-          });
-        });
-      },
-      ({ root, runtime, complete, mistake }) => {
-        root.innerHTML = `
-          ${createMissionTitle("Mission 2: Computer zusammenbauen", "Ziehe Bauteile in passende Plätze oder: Bauteil anklicken, dann Ziel anklicken.")}
-          <div class="mission-grid">
-            <div class="board panel" id="hw-build-board">
-              ${["Mainboard", "Prozessor", "Arbeitsspeicher", "Netzteil", "Festplattenspeicher", "Grafikkarte", "Soundkarte", "Netzwerkkarte"]
-                .map((name) => `<div class="slot" data-accept="${name}" aria-label="Slot ${name}">${name}‑Slot</div>`)
-                .join("")}
-            </div>
-            <div class="parts-bank panel" id="hw-parts-bank">
-              ${shuffle(["Mainboard", "Prozessor", "Arbeitsspeicher", "Netzteil", "Festplattenspeicher", "Grafikkarte", "Soundkarte", "Netzwerkkarte"])
-                .map((name) => `<button type="button" draggable="true" class="part-card" data-part="${name}">${name}</button>`)
-                .join("")}
-            </div>
-          </div>
-        `;
-        const parts = [...root.querySelectorAll(".part-card")];
-        const slots = [...root.querySelectorAll(".slot")];
-        setupPlaceInteraction(parts, slots, runtime.data, () => {
-          const allFilled = slots.every((slot) => slot.dataset.filled === "1");
-          if (allFilled) {
-            setSpeech("Alle Bauteile rasten ein. Der Rechner ist zusammengebaut.");
-            complete();
-          } else {
-            setFeedback("Bauteil rastet ein. Weiter so!", "ok");
-          }
-        }, () => {
-          mistake("Dieses Bauteil passt dort nicht. Wähle den richtigen Einbauort.");
-          setSpeech("Das Teil gehört an eine andere Stelle.");
-        });
-      },
-      ({ root, runtime, complete, mistake }) => {
-        const pairs = [
-          ["Prozessor", "Gehirn"],
-          ["Netzteil", "Herz"],
-          ["Arbeitsspeicher", "Kurzzeitgedächtnis"],
-          ["Festplattenspeicher", "Langzeitgedächtnis"],
-          ["Grafikkarte", "Sehsinn"],
-          ["Soundkarte", "Hörsinn"],
-          ["Mainboard", "Skelett und Nervenbahnen"]
-        ];
-        if (!runtime.data.hardwareLinks) runtime.data.hardwareLinks = {};
-        root.innerHTML = `
-          ${createMissionTitle("Mission 3: Mensch und Computer", "Verbinde jede Komponente mit dem passenden Vergleich.")}
-          <div class="match-columns">
-            <div class="panel" id="hw-left">${pairs.map(([left]) => `<button type="button" class="tag" data-side="left" data-value="${left}">${left}</button>`).join("")}</div>
-            <div class="panel" id="hw-right">${shuffle(pairs.map(([, right]) => right)).map((right) => `<button type="button" class="tag" data-side="right" data-value="${right}">${right}</button>`).join("")}</div>
-          </div>
-          <p><strong>Verbunden:</strong> <span id="hw-link-count">${Object.keys(runtime.data.hardwareLinks).length}</span>/${pairs.length}</p>
-        `;
-        let selectedLeft = null;
-        root.querySelectorAll(".tag").forEach((button) => {
-          const linked = runtime.data.hardwareLinks[button.dataset.value] || Object.values(runtime.data.hardwareLinks).includes(button.dataset.value);
-          if (linked) button.classList.add("linked");
-          button.addEventListener("click", () => {
-            if (button.classList.contains("linked")) return;
-            if (button.dataset.side === "left") {
-              selectedLeft = button.dataset.value;
-              setFeedback(`${selectedLeft} gewählt. Jetzt den passenden Vergleich wählen.`, "info");
-              return;
-            }
-            if (!selectedLeft) {
-              mistake("Wähle zuerst links eine Komponente aus.");
-              return;
-            }
-            const isCorrect = pairs.some(([left, right]) => left === selectedLeft && right === button.dataset.value);
-            if (!isCorrect) {
-              mistake("Diese Zuordnung passt noch nicht. Nutze den Vergleich zwischen Computer und Mensch.");
-              return;
-            }
-            runtime.data.hardwareLinks[selectedLeft] = button.dataset.value;
-            LEVEL_RENDERERS.hardware[2]({ root, runtime, complete, mistake });
-            if (Object.keys(runtime.data.hardwareLinks).length === pairs.length) {
-              complete();
-            }
-          });
-        });
-      },
-      ({ root, runtime, complete, mistake }) => {
-        const cases = [
-          { symptom: "Kein Strom", component: "Netzteil" },
-          { symptom: "Kein Bild", component: "Grafikkarte" },
-          { symptom: "Keine Netzwerkverbindung", component: "Netzwerkkarte" },
-          { symptom: "Kurzfristige Daten nicht speicherbar", component: "Arbeitsspeicher" }
-        ];
-        if (!runtime.data.hwFix) runtime.data.hwFix = {};
-        const open = cases.find((entry) => !runtime.data.hwFix[entry.symptom]);
-        root.innerHTML = `
-          ${createMissionTitle("Abschlussmission: Fehlerdiagnose", open ? `Aktueller Fehler: ${open.symptom}` : "Alle Fehler repariert")}
-          <div class="mission-grid">
-            <div class="panel">
-              <div class="board">
-                ${["Netzteil", "Grafikkarte", "Netzwerkkarte", "Arbeitsspeicher", "Prozessor", "Mainboard", "Festplattenspeicher", "Soundkarte"]
-                  .map((name) => `<button type="button" class="diag-cell" data-component="${name}">${name}</button>`)
-                  .join("")}
-              </div>
-            </div>
-            <div class="panel">
-              <h4>Fehlerliste</h4>
-              ${cases.map((entry) => `<div class="incident ${runtime.data.hwFix[entry.symptom] ? "good" : ""}">${entry.symptom}</div>`).join("")}
-              <p id="computer-state">${open ? "⚫ Computer ist aus" : "🟢 Computer startet sichtbar"}</p>
-            </div>
-          </div>
-        `;
-        root.querySelectorAll(".diag-cell").forEach((button) => {
-          button.addEventListener("click", () => {
-            if (!open) return;
-            const chosen = button.dataset.component;
-            if (chosen === open.component) {
-              runtime.data.hwFix[open.symptom] = true;
-              setSpeech(`${open.component} repariert. Nächsten Fehler prüfen.`);
-              const done = cases.every((entry) => runtime.data.hwFix[entry.symptom]);
-              if (done) {
-                setSpeech("Alles repariert! Der Computer schaltet sich ein.");
-                complete();
-              } else {
-                LEVEL_RENDERERS.hardware[3]({ root, runtime, complete, mistake });
-              }
-            } else {
-              mistake("Das passt nicht zum aktuellen Fehler. Wähle das passende Bauteil.");
-            }
-          });
-        });
-      }
+      (ctx) => startHardwareLevel(ctx),
+      (ctx) => showComponentDiscovery(ctx),
+      (ctx) => startComponentSearch(ctx),
+      (ctx) => startComputerAssembly(ctx),
+      (ctx) => startFunctionAndComparison(ctx),
+      (ctx) => startRepairMission(ctx)
     ],
 
     eva: [
@@ -1428,20 +2147,6 @@
   function setText(root, selector, value) {
     const node = root.querySelector(selector);
     if (node) node.textContent = value;
-  }
-
-  function hardwareHint(part) {
-    const hints = {
-      Mainboard: "Das Mainboard verbindet alle Komponenten wie ein technisches Skelett.",
-      Prozessor: "Der Prozessor verarbeitet Befehle wie ein Gehirn.",
-      Arbeitsspeicher: "Der RAM hält kurzfristige Daten bereit.",
-      Netzteil: "Das Netzteil liefert Energie für alle Teile.",
-      Festplattenspeicher: "Die Festplatte speichert Daten langfristig.",
-      Grafikkarte: "Die Grafikkarte ist für die Bildausgabe zuständig.",
-      Soundkarte: "Die Soundkarte verarbeitet Audio-Ein- und Ausgabe.",
-      Netzwerkkarte: "Die Netzwerkkarte verbindet den Rechner mit anderen Geräten."
-    };
-    return hints[part] || "";
   }
 
   function donePush(arr, value) {
