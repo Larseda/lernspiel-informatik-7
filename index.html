@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Systemretter 7 – Informatik Lernspiel</title>
+  <title>Systemretter 7 – Mission Computerwelt</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -11,61 +11,81 @@
 
   <header class="app-header">
     <h1>Systemretter 7</h1>
-    <p class="subtitle">Lernabenteuer Informatik – Klasse 7</p>
-
-    <section class="progress-panel" aria-label="Spielstatus">
-      <div class="stats" role="status" aria-live="polite">
-        <span><strong>Aktuelles Level:</strong> <span id="current-level-label">–</span></span>
-        <span><strong>Gesamtfortschritt:</strong> <span id="overall-progress">0%</span></span>
-        <span><strong>Punkte:</strong> <span id="total-points">0</span></span>
-        <span><strong>Sterne:</strong> <span id="total-stars">0</span></span>
-        <span><strong>Abgeschlossen:</strong> <span id="completed-count">0</span></span>
-        <span><strong>Übersprungen:</strong> <span id="skipped-count">0</span></span>
+    <p class="subtitle">Mission Computerwelt – Informatik Klasse 7</p>
+    <section class="hud" aria-label="Spielstatus">
+      <div class="hud-grid" role="status" aria-live="polite">
+        <span><strong>Bereich:</strong> <span id="hud-location">Start</span></span>
+        <span><strong>Fortschritt:</strong> <span id="hud-progress">0%</span></span>
+        <span><strong>Punkte:</strong> <span id="hud-points">0</span></span>
+        <span><strong>Sterne:</strong> <span id="hud-stars">0</span></span>
+        <span><strong>Abgeschlossen:</strong> <span id="hud-completed">0</span></span>
+        <span><strong>Übersprungen:</strong> <span id="hud-skipped">0</span></span>
       </div>
-
-      <ol id="level-progress" class="level-progress" aria-label="Levelfortschritt"></ol>
+      <ol id="hud-level-strip" class="hud-level-strip" aria-label="Levelstatus"></ol>
     </section>
   </header>
 
   <main id="main-content" class="app-main">
-    <section class="game-card" aria-labelledby="level-title">
-      <div class="mascot-area" aria-label="Spielfigur">
-        <div class="mascot" role="img" aria-label="Freundliche digitale Spielfigur">
-          <div class="face">
-            <span class="eye"></span>
-            <span class="eye"></span>
-            <span class="mouth"></span>
-          </div>
-        </div>
-        <p id="mascot-message" class="speech" aria-live="polite"></p>
+    <aside id="mascot-panel" class="mascot-panel hidden" aria-label="Digitale Begleitfigur">
+      <div id="mascot-avatar" class="mascot-avatar" role="img" aria-label="Byte, digitale Begleitfigur">
+        <svg viewBox="0 0 160 160" aria-hidden="true">
+          <defs>
+            <linearGradient id="byteBody" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#4dd3ff"></stop>
+              <stop offset="100%" stop-color="#2563eb"></stop>
+            </linearGradient>
+          </defs>
+          <circle cx="80" cy="80" r="62" fill="url(#byteBody)"></circle>
+          <rect x="42" y="112" width="76" height="22" rx="11" fill="#0f172a"></rect>
+          <circle cx="62" cy="70" r="10" fill="#0f172a"></circle>
+          <circle cx="98" cy="70" r="10" fill="#0f172a"></circle>
+          <path d="M55,95 Q80,118 105,95" stroke="#0f172a" stroke-width="7" fill="none" stroke-linecap="round"></path>
+          <path d="M22,55 L8,45" stroke="#7dd3fc" stroke-width="6" stroke-linecap="round"></path>
+          <path d="M138,55 L152,45" stroke="#7dd3fc" stroke-width="6" stroke-linecap="round"></path>
+        </svg>
       </div>
+      <p id="mascot-name">Byte</p>
+      <p id="mascot-speech" class="mascot-speech" aria-live="polite"></p>
+      <button id="dialog-next-btn" type="button" class="secondary-btn hidden">Weiter</button>
+    </aside>
 
-      <div class="content-area">
-        <h2 id="level-title">Lädt…</h2>
-        <p id="step-title" class="step-title"></p>
-        <p id="step-description" class="step-description"></p>
+    <section id="start-screen" class="screen center-screen" aria-labelledby="start-title">
+      <h2 id="start-title">Systemausfall in der Computerwelt</h2>
+      <p>Mehrere Systembereiche sind offline. Starte die Mission und repariere sieben Stationen.</p>
+      <button id="start-mission-btn" type="button" class="primary-btn big-btn">Mission starten</button>
+    </section>
 
-        <div id="activity-container" class="activity-container"></div>
-
-        <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
-
-        <div class="actions">
-          <button id="prev-step-btn" type="button">Zurück</button>
-          <button id="hint-btn" type="button">Hinweis</button>
-          <button id="explain-btn" type="button" class="hidden">Lösung erklären</button>
-          <button id="check-btn" type="button">Antwort prüfen</button>
-          <button id="next-step-btn" type="button">Weiter</button>
-        </div>
-
-        <div class="secondary-actions">
-          <button id="restart-level-btn" type="button">Level neu starten</button>
-          <button id="skip-level-btn" type="button" class="warning">Level überspringen</button>
-          <button id="reset-progress-btn" type="button" class="danger">Fortschritt zurücksetzen</button>
+    <section id="map-screen" class="screen hidden" aria-labelledby="map-title">
+      <h2 id="map-title">Weltkarte: Digitale Computerwelt</h2>
+      <p class="screen-intro">Wähle eine verfügbare Station. Nach jedem Erfolg wird das System sichtbar reaktiviert.</p>
+      <div class="map-wrap">
+        <svg class="world-map" viewBox="0 0 1200 540" role="img" aria-labelledby="map-title">
+          <path class="data-route" d="M90 450 C200 420, 240 320, 340 300 S520 260, 590 180 S760 130, 860 180 S1030 270, 1110 120"></path>
+          <path class="data-route glow" d="M90 450 C200 420, 240 320, 340 300 S520 260, 590 180 S760 130, 860 180 S1030 270, 1110 120"></path>
+          <g id="station-layer"></g>
+          <g id="connection-layer"></g>
+        </svg>
+        <div id="map-hero" class="map-hero" aria-label="Position von Byte">
+          <div class="map-hero-core"></div>
         </div>
       </div>
     </section>
 
-    <section id="final-screen" class="final-screen hidden" aria-live="polite"></section>
+    <section id="level-screen" class="screen hidden" aria-labelledby="level-title">
+      <div class="level-header">
+        <h2 id="level-title">Station</h2>
+        <div class="level-actions">
+          <button id="level-back-map-btn" type="button" class="secondary-btn">Zurück zur Karte</button>
+          <button id="skip-level-btn" type="button" class="warning-btn">Level überspringen</button>
+          <button id="reset-progress-btn" type="button" class="danger-btn">Fortschritt zurücksetzen</button>
+        </div>
+      </div>
+      <p id="level-objective" class="level-objective"></p>
+      <div id="level-stage" class="level-stage" tabindex="-1"></div>
+      <div id="level-feedback" class="level-feedback" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="end-screen" class="screen hidden" aria-live="polite"></section>
   </main>
 
   <script src="js/levels.js"></script>
