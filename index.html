@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Systemretter 7 – Informatik Lernspiel</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+  <header class="app-header">
+    <h1>Systemretter 7</h1>
+    <p class="subtitle">Lernabenteuer Informatik – Klasse 7</p>
+
+    <section class="progress-panel" aria-label="Spielstatus">
+      <div class="stats" role="status" aria-live="polite">
+        <span><strong>Aktuelles Level:</strong> <span id="current-level-label">–</span></span>
+        <span><strong>Gesamtfortschritt:</strong> <span id="overall-progress">0%</span></span>
+        <span><strong>Punkte:</strong> <span id="total-points">0</span></span>
+        <span><strong>Sterne:</strong> <span id="total-stars">0</span></span>
+        <span><strong>Abgeschlossen:</strong> <span id="completed-count">0</span></span>
+        <span><strong>Übersprungen:</strong> <span id="skipped-count">0</span></span>
+      </div>
+
+      <ol id="level-progress" class="level-progress" aria-label="Levelfortschritt"></ol>
+    </section>
+  </header>
+
+  <main id="main-content" class="app-main">
+    <section class="game-card" aria-labelledby="level-title">
+      <div class="mascot-area" aria-label="Spielfigur">
+        <div class="mascot" role="img" aria-label="Freundliche digitale Spielfigur">
+          <div class="face">
+            <span class="eye"></span>
+            <span class="eye"></span>
+            <span class="mouth"></span>
+          </div>
+        </div>
+        <p id="mascot-message" class="speech" aria-live="polite"></p>
+      </div>
+
+      <div class="content-area">
+        <h2 id="level-title">Lädt…</h2>
+        <p id="step-title" class="step-title"></p>
+        <p id="step-description" class="step-description"></p>
+
+        <div id="activity-container" class="activity-container"></div>
+
+        <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+
+        <div class="actions">
+          <button id="prev-step-btn" type="button">Zurück</button>
+          <button id="hint-btn" type="button">Hinweis</button>
+          <button id="explain-btn" type="button" class="hidden">Lösung erklären</button>
+          <button id="check-btn" type="button">Antwort prüfen</button>
+          <button id="next-step-btn" type="button">Weiter</button>
+        </div>
+
+        <div class="secondary-actions">
+          <button id="restart-level-btn" type="button">Level neu starten</button>
+          <button id="skip-level-btn" type="button" class="warning">Level überspringen</button>
+          <button id="reset-progress-btn" type="button" class="danger">Fortschritt zurücksetzen</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="final-screen" class="final-screen hidden" aria-live="polite"></section>
+  </main>
+
+  <script src="js/levels.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
